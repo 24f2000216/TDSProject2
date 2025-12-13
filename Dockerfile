@@ -1,33 +1,37 @@
-FROM python:3.10.9
+FROM python:3.11-slim
 
+# Set working directory
 WORKDIR /app
 
-# Install system dependencies for Playwright
+# Install system dependencies required for Playwright
 RUN apt-get update && apt-get install -y \
-    libnss3 \
-    libnspr4 \
-    libdbus-1-3 \
-    libatk1.0-0 \
-    libatk-bridge2.0-0 \
-    libcups2 \
-    libdrm2 \
-    libxkbcommon0 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxfixes3 \
-    libxrandr2 \
-    libgbm1 \
-    libasound2 \
+    wget \
+    gnupg \
     && rm -rf /var/lib/apt/lists/*
 
+# Copy requirements
 COPY requirements.txt .
 
-RUN pip install --no-cache-dir --upgrade -r requirements.txt
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
 
+# Install Playwright browsers
 RUN playwright install chromium
 
+# Copy application code
 COPY . .
 
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV APP_HOST=0.0.0.0
+ENV APP_PORT=7860
+
+# Expose port (Hugging Face Spaces uses 7860)
 EXPOSE 7860
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "7860"]
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "import httpx; httpx.get('http://localhost:7860/health', timeout=5)" || exit 1
+
+# Run the application
+CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "7860"]
